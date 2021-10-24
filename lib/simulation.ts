@@ -5,6 +5,7 @@ import { ForkStateManager } from "hardhat/internal/hardhat-network/provider/fork
 import { ForkBlockchain } from "hardhat/internal/hardhat-network/provider/fork/ForkBlockchain";
 import { makeForkClient } from "hardhat/internal/hardhat-network/provider/utils/makeForkClient";
 import { makeForkCommon } from "hardhat/internal/hardhat-network/provider/utils/makeForkCommon";
+import { VMTracer } from "hardhat/internal/hardhat-network/stack-traces/vm-tracer";
 
 const CONFIG = {
   networkId: 1,
@@ -38,6 +39,13 @@ export const simulateTx = async (txData: TxData, from: string) => {
   tx.getSenderAddress = () => Address.fromString(from);
 
   const vm = await createVM();
+
+  const vmTracer = new VMTracer(vm, vm.stateManager.getContractCode.bind(vm.stateManager));
+  vmTracer.enableTracing();
+
   const result = await vm.runTx({ tx });
-  return result;
+
+  const trace = vmTracer.getLastTopLevelMessageTrace();
+
+  return { result, trace };
 };
