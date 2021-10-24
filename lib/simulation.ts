@@ -18,6 +18,9 @@ const createVM = async () => {
     CONFIG.forkConfig
   );
   const stateManager = new ForkStateManager(forkClient, forkBlockNumber);
+  // Disabled since we need the original storage
+  stateManager.clearOriginalStorageCache = () => {};
+
   // @todo Improve typing
   const common = await makeForkCommon(CONFIG as any);
   const blockchain = new ForkBlockchain(forkClient, forkBlockNumber, common);
@@ -35,6 +38,6 @@ export const simulateTx = async (txData: TxData, from: string) => {
   tx.getSenderAddress = () => Address.fromString(from);
 
   const vm = await createVM();
-  const result = await vm.runTx({ tx, reportAccessList: false });
+  const result = await vm.runTx({ tx });
   return result;
 };
