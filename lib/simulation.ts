@@ -6,13 +6,7 @@ import { ForkBlockchain } from "hardhat/internal/hardhat-network/provider/fork/F
 import { makeForkClient } from "hardhat/internal/hardhat-network/provider/utils/makeForkClient";
 import { makeForkCommon } from "hardhat/internal/hardhat-network/provider/utils/makeForkCommon";
 import { VMTracer } from "hardhat/internal/hardhat-network/stack-traces/vm-tracer";
-
-const CONFIG = {
-  networkId: 1,
-  forkConfig: {
-    jsonRpcUrl: "https://api.mycryptoapi.com/eth",
-  },
-};
+import { CONFIG } from "./config";
 
 const createVM = async () => {
   const { forkClient, forkBlockNumber } = await makeForkClient(
