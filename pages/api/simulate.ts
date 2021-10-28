@@ -15,6 +15,6 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     data,
     "0xe77162b7D2CEb3625a4993Bab557403a7B706F18"
   );
-  const interpreted = await interpretResult(to, result);
+  const interpreted = await interpretResult(to, result, trace);
   res.status(200).json({ interpreted, raw: result, trace });
 };

@@ -2,8 +2,15 @@ import { RunTxResult } from "@ethereumjs/vm/dist/runTx";
 import { Address, bufferToHex, toBuffer } from "ethereumjs-util";
 import { ForkStateManager } from "hardhat/internal/hardhat-network/provider/fork/ForkStateManager";
 import { AccountState } from "hardhat/internal/hardhat-network/provider/fork/AccountState";
-import { decodeLog, fetchMetadata } from "./abi";
+import { decodeLog } from "./abi";
 import { CONFIG } from "./config";
+import { MessageTrace } from "hardhat/internal/hardhat-network/stack-traces/message-trace";
+import { VmTraceDecoder } from "hardhat/internal/hardhat-network/stack-traces/vm-trace-decoder";
+import { ContractsIdentifier } from "hardhat/internal/hardhat-network/stack-traces/contracts-identifier";
+import { printMessageTrace } from "hardhat/internal/hardhat-network/stack-traces/debug";
+import { createModelsAndDecodeBytecodes } from "hardhat/internal/hardhat-network/stack-traces/compiler-to-model";
+import { fetchMetadata, fetchSources, Metadata } from "./sourcify";
+import { compileSources } from "./compile";
 
 export const findStateChanges = async (result: RunTxResult) => {
   const stateManager = result.execResult.runState
@@ -55,11 +62,49 @@ export const findStateChanges = async (result: RunTxResult) => {
   return diff;
 };
 
+const decodeTrace = async (
+  contractAddress: string,
+  partial: boolean,
+  metadata: Metadata,
+  trace: MessageTrace
+) => {
+  const sources = await fetchSources(
+    partial,
+    CONFIG.networkId,
+    contractAddress,
+    metadata
+  );
+
+  const [input, output] = await compileSources(metadata, sources);
+  const contractsIdentifier = new ContractsIdentifier();
+
+  const bytecodes = createModelsAndDecodeBytecodes(
+    metadata.compiler.version,
+    input,
+    output
+  );
+
+  for (const bytecode of bytecodes) {
+    contractsIdentifier.addBytecode(bytecode);
+  }
+
+  const decoder = new VmTraceDecoder(contractsIdentifier);
+  const decoded = decoder.tryToDecodeMessageTrace(trace);
+
+  printMessageTrace(decoded);
+  // @todo Simplify / increase readability
+  return decoded;
+};
+
 export const interpretResult = async (
   contractAddress: string,
-  result: RunTxResult
+  result: RunTxResult,
+  trace: MessageTrace
 ) => {
-  const metadata = await fetchMetadata(CONFIG.networkId, contractAddress);
+  const { metadata, partial } = await fetchMetadata(
+    CONFIG.networkId,
+    contractAddress
+  );
   const abi = metadata?.output?.abi;
   const logs = result.execResult.logs?.map((l) => ({
     address: bufferToHex(l[0]),
@@ -70,5 +115,7 @@ export const interpretResult = async (
   const status = result.receipt.status ? "success" : "reverted";
   const gasUsed = result.gasUsed.toString(10);
   const stateChanges = await findStateChanges(result);
+  const decodedTrace =
+    metadata && (await decodeTrace(contractAddress, partial, metadata, trace));
   return { logs, status, gasUsed, stateChanges, metadata };
 };
