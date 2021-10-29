@@ -20,6 +20,7 @@ const getCompilerInput = (
           "evm.bytecode",
           "evm.deployedBytecode",
           "evm.methodIdentifiers",
+          "storageLayout"
         ],
         "": ["id", "ast"],
       },

@@ -5,10 +5,10 @@ export interface Metadata {
   language: string;
   output: any;
   settings: {
-      optimizer: {
-          enabled: boolean;
-          runs: number;
-      }
+    optimizer: {
+      enabled: boolean;
+      runs: number;
+    };
   };
   sources: Record<
     string,
@@ -21,8 +21,8 @@ export interface Metadata {
 }
 
 export interface Source {
-    file: string;
-    content: string;
+  file: string;
+  content: string;
 }
 
 // @todo Cache
@@ -31,7 +31,10 @@ export const fetchMetadata = async (chainId: number, address: string) => {
     `https://repo.sourcify.dev/contracts/full_match/${chainId}/${address}/metadata.json`
   )
     .then((r) => (r.ok ? r.json() : null))
-    .catch(console.error);
+    .catch((err) => {
+      console.error(err);
+      return null;
+    });
 
   if (fullMatch) {
     return { metadata: fullMatch, partial: false };
@@ -40,7 +43,10 @@ export const fetchMetadata = async (chainId: number, address: string) => {
     `https://repo.sourcify.dev/contracts/partial_match/${chainId}/${address}/metadata.json`
   )
     .then((r) => (r.ok ? r.json() : null))
-    .catch(console.error);
+    .catch((err) => {
+      console.error(err);
+      return null;
+    });
   return { metadata: partialMatch, partial: true };
 };
 
@@ -61,7 +67,10 @@ export const fetchSources = async (
         }_match/${chainId}/${address}/sources/${sanitized}`
       )
         .then((r) => (r.ok ? r.text() : null))
-        .catch(console.error);
+        .catch((err) => {
+          console.error(err);
+          return null;
+        });
 
       return { file, content };
     })

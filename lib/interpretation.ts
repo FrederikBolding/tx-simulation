@@ -4,13 +4,21 @@ import { ForkStateManager } from "hardhat/internal/hardhat-network/provider/fork
 import { AccountState } from "hardhat/internal/hardhat-network/provider/fork/AccountState";
 import { decodeLog } from "./abi";
 import { CONFIG } from "./config";
-import { MessageTrace } from "hardhat/internal/hardhat-network/stack-traces/message-trace";
+import {
+  CallMessageTrace,
+  isEvmStep,
+  MessageTrace,
+} from "hardhat/internal/hardhat-network/stack-traces/message-trace";
 import { VmTraceDecoder } from "hardhat/internal/hardhat-network/stack-traces/vm-trace-decoder";
 import { ContractsIdentifier } from "hardhat/internal/hardhat-network/stack-traces/contracts-identifier";
-import { printMessageTrace } from "hardhat/internal/hardhat-network/stack-traces/debug";
 import { createModelsAndDecodeBytecodes } from "hardhat/internal/hardhat-network/stack-traces/compiler-to-model";
 import { fetchMetadata, fetchSources, Metadata } from "./sourcify";
 import { compileSources } from "./compile";
+import { JumpType } from "hardhat/internal/hardhat-network/stack-traces/model";
+import {
+  isPush,
+  Opcode,
+} from "hardhat/internal/hardhat-network/stack-traces/opcodes";
 
 export const findStateChanges = async (result: RunTxResult) => {
   const stateManager = result.execResult.runState
@@ -89,11 +97,38 @@ const decodeTrace = async (
   }
 
   const decoder = new VmTraceDecoder(contractsIdentifier);
-  const decoded = decoder.tryToDecodeMessageTrace(trace);
+  const decoded = decoder.tryToDecodeMessageTrace(trace) as CallMessageTrace;
 
-  printMessageTrace(decoded);
-  // @todo Simplify / increase readability
-  return decoded;
+  var depth = -1;
+  const callStack = decoded.steps?.reduce((acc, step) => {
+    if (isEvmStep(step)) {
+      const instruction = decoded.bytecode.getInstruction(step.pc);
+      const func = instruction.location?.getContainingFunction();
+      if (func && instruction.jumpType === JumpType.INTO_FUNCTION) {
+        depth++;
+        const lineNum = instruction.location.getStartingLineNumber();
+
+        return [
+          ...acc,
+          {
+            sourceName: instruction.location.file.sourceName,
+            functionName: func.name,
+            lineNum,
+            depth,
+          },
+        ];
+      } else if (instruction.jumpType === JumpType.OUTOF_FUNCTION) {
+        depth--;
+      }
+    }
+    return acc;
+  }, []);
+
+  const storage = Object.values(output.contracts).map((c) =>
+    Object.values(c).map((innerContract) => innerContract.storageLayout)
+  );
+
+  return { callStack, storage };
 };
 
 export const interpretResult = async (
@@ -117,5 +152,5 @@ export const interpretResult = async (
   const stateChanges = await findStateChanges(result);
   const decodedTrace =
     metadata && (await decodeTrace(contractAddress, partial, metadata, trace));
-  return { logs, status, gasUsed, stateChanges, metadata };
+  return { logs, status, gasUsed, stateChanges, metadata, decodedTrace };
 };
