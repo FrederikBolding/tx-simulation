@@ -8,7 +8,7 @@ export default async (req: NextApiRequest, res: NextApiResponse) => {
     to,
     data: "0xc97336f3",
     gasLimit: 150000,
-    nonce: 169,
+    nonce: 171,
     value: "0x2386f26fc10000",
   };
   const { result, trace } = await simulateTx(

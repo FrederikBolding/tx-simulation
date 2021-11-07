@@ -15,10 +15,8 @@ import { createModelsAndDecodeBytecodes } from "hardhat/internal/hardhat-network
 import { fetchMetadata, fetchSources, Metadata } from "./sourcify";
 import { compileSources } from "./compile";
 import { JumpType } from "hardhat/internal/hardhat-network/stack-traces/model";
-import {
-  isPush,
-  Opcode,
-} from "hardhat/internal/hardhat-network/stack-traces/opcodes";
+import { Opcode } from "hardhat/internal/hardhat-network/stack-traces/opcodes";
+import { searchASTs } from "./ast";
 
 export const findStateChanges = async (result: RunTxResult) => {
   const stateManager = result.execResult.runState
@@ -86,6 +84,8 @@ const decodeTrace = async (
   const [input, output] = await compileSources(metadata, sources);
   const contractsIdentifier = new ContractsIdentifier();
 
+  //console.log(output.sources['contracts/Waves.sol'].ast)
+
   const bytecodes = createModelsAndDecodeBytecodes(
     metadata.compiler.version,
     input,
@@ -124,11 +124,51 @@ const decodeTrace = async (
     return acc;
   }, []);
 
-  const storage = Object.values(output.contracts).map((c) =>
-    Object.values(c).map((innerContract) => innerContract.storageLayout)
-  );
+  const outputSources = Object.values(output.sources);
+  const asts = outputSources.map((o) => o.ast);
 
-  return { callStack, storage };
+  console.log(output.contracts);
+
+  const storage = Object.entries(output.contracts)
+    .map(([contract, c]) =>
+      Object.values(c).map((innerContract) => ({
+        contract,
+        ...innerContract.storageLayout,
+      }))
+    )
+    .flat();
+
+  const storageChanges = decoded.steps?.reduce((acc, step) => {
+    if (isEvmStep(step)) {
+      const instruction = decoded.bytecode.getInstruction(step.pc);
+      if (instruction.opcode === Opcode.SSTORE) {
+        const sourceName = instruction.location.file.sourceName;
+        const file = outputSources.find(
+          (o) => o.ast.absolutePath === sourceName
+        );
+        const sourceLocation =
+          file &&
+          `${instruction.location.offset}:${instruction.location.length}:${file.id}`;
+
+        const astNode = searchASTs(asts, sourceLocation);
+        // @todo Improve
+        const referencedDeclaration =
+          astNode?.expression?.leftHandSide?.baseExpression
+            ?.referencedDeclaration;
+
+        const contractStorage = storage.find((s) => s.contract === sourceName);
+        const storageInfo = contractStorage.storage.find(
+          (s) => s.astId === referencedDeclaration
+        );
+        const type = storageInfo && contractStorage.types[storageInfo.type];
+
+        return [...acc, { referencedDeclaration, astNode, storageInfo, type }];
+      }
+    }
+    return acc;
+  }, []);
+
+  return { callStack, storage, asts, storageChanges };
 };
 
 export const interpretResult = async (
