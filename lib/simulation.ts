@@ -7,6 +7,7 @@ import { makeForkClient } from "hardhat/internal/hardhat-network/provider/utils/
 import { makeForkCommon } from "hardhat/internal/hardhat-network/provider/utils/makeForkCommon";
 import { VMTracer } from "hardhat/internal/hardhat-network/stack-traces/vm-tracer";
 import { CONFIG } from "./config";
+import { CustomTracer } from "./tracer";
 
 const createVM = async () => {
   const { forkClient, forkBlockNumber } = await makeForkClient(
@@ -37,9 +38,13 @@ export const simulateTx = async (txData: TxData, from: string) => {
   const vmTracer = new VMTracer(vm, vm.stateManager.getContractCode.bind(vm.stateManager));
   vmTracer.enableTracing();
 
+  const customTracer = new CustomTracer(vm);
+
   const result = await vm.runTx({ tx });
 
   const trace = vmTracer.getLastTopLevelMessageTrace();
+  
+  const stores = customTracer.getStoreSteps();
 
-  return { result, trace };
+  return { result, trace, stores };
 };

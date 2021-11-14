@@ -17,6 +17,7 @@ import { compileSources } from "./compile";
 import { JumpType } from "hardhat/internal/hardhat-network/stack-traces/model";
 import { Opcode } from "hardhat/internal/hardhat-network/stack-traces/opcodes";
 import { searchASTs } from "./ast";
+import { InterpreterStep } from "@ethereumjs/vm/dist/evm/interpreter";
 
 export const findStateChanges = async (result: RunTxResult) => {
   const stateManager = result.execResult.runState
@@ -72,7 +73,8 @@ const decodeTrace = async (
   contractAddress: string,
   partial: boolean,
   metadata: Metadata,
-  trace: MessageTrace
+  trace: MessageTrace,
+  stores: InterpreterStep[]
 ) => {
   const sources = await fetchSources(
     partial,
@@ -83,8 +85,6 @@ const decodeTrace = async (
 
   const [input, output] = await compileSources(metadata, sources);
   const contractsIdentifier = new ContractsIdentifier();
-
-  //console.log(output.sources['contracts/Waves.sol'].ast)
 
   const bytecodes = createModelsAndDecodeBytecodes(
     metadata.compiler.version,
@@ -127,8 +127,6 @@ const decodeTrace = async (
   const outputSources = Object.values(output.sources);
   const asts = outputSources.map((o) => o.ast);
 
-  console.log(output.contracts);
-
   const storage = Object.entries(output.contracts)
     .map(([contract, c]) =>
       Object.values(c).map((innerContract) => ({
@@ -162,7 +160,13 @@ const decodeTrace = async (
         );
         const type = storageInfo && contractStorage.types[storageInfo.type];
 
-        return [...acc, { referencedDeclaration, astNode, storageInfo, type }];
+        const step = stores.find(s => s.pc === instruction.pc);
+
+        const storageKey = bufferToHex(toBuffer(step.stack[step.stack.length - 1]));
+        const storageValue = bufferToHex(toBuffer(step.stack[step.stack.length - 2] ?? 0));
+        const address = step.address.toString();
+
+        return [...acc, { address, referencedDeclaration, astNode, storageInfo, type, storageKey, storageValue }];
       }
     }
     return acc;
@@ -174,7 +178,8 @@ const decodeTrace = async (
 export const interpretResult = async (
   contractAddress: string,
   result: RunTxResult,
-  trace: MessageTrace
+  trace: MessageTrace,
+  stores: InterpreterStep[]
 ) => {
   const { metadata, partial } = await fetchMetadata(
     CONFIG.networkId,
@@ -191,6 +196,6 @@ export const interpretResult = async (
   const gasUsed = result.gasUsed.toString(10);
   const stateChanges = await findStateChanges(result);
   const decodedTrace =
-    metadata && (await decodeTrace(contractAddress, partial, metadata, trace));
+    metadata && (await decodeTrace(contractAddress, partial, metadata, trace, stores));
   return { logs, status, gasUsed, stateChanges, metadata, decodedTrace };
 };

@@ -4,6 +4,7 @@ import Head from "next/head";
 import useSWR from "swr";
 import { CallStack } from "../components/CallStack";
 import { Logs } from "../components/Logs";
+import { StateChanges } from "../components/StateChanges";
 import { TxDetails } from "../components/TxDetails";
 
 const fetcher = (...args) => fetch(...args).then((res) => res.json());
@@ -30,6 +31,10 @@ export default function Home() {
               gasUsed={interpreted.gasUsed}
             />
             <Logs logs={interpreted.logs} />
+            <StateChanges
+              rawStateChanges={interpreted.stateChanges}
+              storageChanges={interpreted.decodedTrace.storageChanges}
+            />
             <CallStack callStack={interpreted.decodedTrace.callStack} />
           </VStack>
         ) : (
