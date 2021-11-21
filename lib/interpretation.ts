@@ -136,6 +136,24 @@ const decodeTrace = async (
     )
     .flat();
 
+  const instructions = decoded.steps?.filter(isEvmStep).map((step) => {
+    const instruction = decoded.bytecode.getInstruction(step.pc);
+    const sourceName = instruction.location?.file.sourceName;
+    const file = outputSources.find((o) => o.ast.absolutePath === sourceName);
+    const sourceLocation =
+      file &&
+      instruction.location &&
+      `${instruction.location.offset}:${instruction.location.length}:${file.id}`;
+    return {
+      pc: step.pc,
+      opcode: Object.keys(Opcode).find(
+        (key) => Opcode[key] === instruction.opcode
+      ),
+      pushData: instruction.pushData && bufferToHex(instruction.pushData),
+      sourceLocation,
+    };
+  });
+
   const storageChanges = decoded.steps?.reduce((acc, step) => {
     if (isEvmStep(step)) {
       const instruction = decoded.bytecode.getInstruction(step.pc);
@@ -150,6 +168,7 @@ const decodeTrace = async (
 
         const astNode = searchASTs(asts, sourceLocation);
         // @todo Improve
+
         const referencedDeclaration =
           astNode?.expression?.leftHandSide?.baseExpression
             ?.referencedDeclaration;
@@ -160,19 +179,36 @@ const decodeTrace = async (
         );
         const type = storageInfo && contractStorage.types[storageInfo.type];
 
-        const step = stores.find(s => s.pc === instruction.pc);
+        const s = stores.find((s) => s.pc === instruction.pc);
 
-        const storageKey = bufferToHex(toBuffer(step.stack[step.stack.length - 1]));
-        const storageValue = bufferToHex(toBuffer(step.stack[step.stack.length - 2] ?? 0));
-        const address = step.address.toString();
+        const storageKey = bufferToHex(toBuffer(s.stack[s.stack.length - 1]));
+        const storageValue = bufferToHex(
+          toBuffer(s.stack[s.stack.length - 2] ?? 0)
+        );
+        const index = type?.key.includes("int")
+          ? parseInt(s.lastSHA?.potentialIndex)
+          : s.lastSHA?.potentialIndex;
+        const address = s.address.toString();
 
-        return [...acc, { address, referencedDeclaration, astNode, storageInfo, type, storageKey, storageValue }];
+        return [
+          ...acc,
+          {
+            address,
+            referencedDeclaration,
+            astNode,
+            storageInfo,
+            type,
+            storageKey,
+            storageValue,
+            index,
+          },
+        ];
       }
     }
     return acc;
   }, []);
 
-  return { callStack, storage, asts, storageChanges };
+  return { callStack, storage, asts, storageChanges, instructions };
 };
 
 export const interpretResult = async (
@@ -196,6 +232,7 @@ export const interpretResult = async (
   const gasUsed = result.gasUsed.toString(10);
   const stateChanges = await findStateChanges(result);
   const decodedTrace =
-    metadata && (await decodeTrace(contractAddress, partial, metadata, trace, stores));
+    metadata &&
+    (await decodeTrace(contractAddress, partial, metadata, trace, stores));
   return { logs, status, gasUsed, stateChanges, metadata, decodedTrace };
 };
