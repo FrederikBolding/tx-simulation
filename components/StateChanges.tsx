@@ -8,9 +8,7 @@ export const StateChanges = ({ rawStateChanges, storageChanges }) => (
           {/**<Text as="span" fontWeight="bold">
             {change.address}
           </Text>**/}
-          <Text as="span" fontWeight="bold">
-            {change.type?.label}
-          </Text>
+          <Code as="span">{change.type?.label}</Code>
           <Text as="span" fontWeight="bold">
             {change.storageInfo?.label}
             {change.index && `[${change.index}]`}

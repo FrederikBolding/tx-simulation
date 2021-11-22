@@ -1,31 +1,31 @@
 // @todo Clean up this entire file
 
-export const searchASTs = (asts: any[], src: string) => {
+export const searchASTs = (asts: any[], predicate: (i: any) => boolean) => {
   return asts.reduce((acc, cur) => {
     if (acc) {
       return acc;
     }
-    const result = searchAST(cur, src);
+    const result = searchAST(cur, predicate);
     return result;
   }, undefined);
 };
 
-export const searchAST = (ast: any, src: string) => {
+export const searchAST = (ast: any, predicate: (i: any) => boolean) => {
   return ast.nodes.reduce((acc, cur) => {
     if (acc) {
       return acc;
     }
-    if (cur.src === src) {
+    if (predicate(cur)) {
       return cur;
     } else if ("nodes" in cur) {
-      return searchAST(cur, src);
+      return searchAST(cur, predicate);
     }
-    return searchForSrc(cur, src);
+    return nestedSearch(cur, predicate);
   }, undefined);
 };
 
-const searchForSrc = (obj: any, src: string) => {
-  if (obj.src === src) {
+export const nestedSearch = (obj: any, predicate: (i: any) => boolean) => {
+  if (predicate(obj)) {
     return obj;
   }
   return Object.values(obj)
@@ -37,6 +37,6 @@ const searchForSrc = (obj: any, src: string) => {
       if (!cur) {
         return acc;
       }
-      return searchForSrc(cur, src);
+      return nestedSearch(cur, predicate);
     }, undefined);
 };

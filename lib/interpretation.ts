@@ -1,5 +1,5 @@
 import { RunTxResult } from "@ethereumjs/vm/dist/runTx";
-import { Address, bufferToHex, toBuffer } from "ethereumjs-util";
+import { Address, bufferToHex, toBuffer, unpadBuffer } from "ethereumjs-util";
 import { ForkStateManager } from "hardhat/internal/hardhat-network/provider/fork/ForkStateManager";
 import { AccountState } from "hardhat/internal/hardhat-network/provider/fork/AccountState";
 import { decodeLog } from "./abi";
@@ -16,7 +16,7 @@ import { fetchMetadata, fetchSources, Metadata } from "./sourcify";
 import { compileSources } from "./compile";
 import { JumpType } from "hardhat/internal/hardhat-network/stack-traces/model";
 import { Opcode } from "hardhat/internal/hardhat-network/stack-traces/opcodes";
-import { searchASTs } from "./ast";
+import { nestedSearch, searchASTs } from "./ast";
 import { InterpreterStep } from "@ethereumjs/vm/dist/evm/interpreter";
 
 export const findStateChanges = async (result: RunTxResult) => {
@@ -49,7 +49,7 @@ export const findStateChanges = async (result: RunTxResult) => {
           return [
             ...(await storageAcc),
             {
-              key: storageKey,
+              key: bufferToHex(unpadBuffer(storageKeyBuf)),
               original: bufferToHex(original),
               now: bufferToHex(now),
             },
@@ -166,12 +166,18 @@ const decodeTrace = async (
           file &&
           `${instruction.location.offset}:${instruction.location.length}:${file.id}`;
 
-        const astNode = searchASTs(asts, sourceLocation);
+        const astNode = searchASTs(asts, (i) => i.src === sourceLocation);
         // @todo Improve
 
-        const referencedDeclaration =
+        const defaultDeclaration =
           astNode?.expression?.leftHandSide?.baseExpression
             ?.referencedDeclaration;
+        const pushDeclaration = nestedSearch(
+          astNode,
+          (i) => i.nodeType === "MemberAccess" && i.memberName === "push"
+        )?.expression.referencedDeclaration;
+
+        const referencedDeclaration = pushDeclaration ?? defaultDeclaration;
 
         const contractStorage = storage.find((s) => s.contract === sourceName);
         const storageInfo = contractStorage.storage.find(
@@ -181,13 +187,18 @@ const decodeTrace = async (
 
         const s = stores.find((s) => s.pc === instruction.pc);
 
-        const storageKey = bufferToHex(toBuffer(s.stack[s.stack.length - 1]));
-        const storageValue = bufferToHex(
-          toBuffer(s.stack[s.stack.length - 2] ?? 0)
+        const storageKey = bufferToHex(
+          unpadBuffer(toBuffer(s.stack[s.stack.length - 1]))
         );
-        const index = type?.key.includes("int")
-          ? parseInt(s.lastSHA?.potentialIndex)
-          : s.lastSHA?.potentialIndex;
+        const storageValue = bufferToHex(
+          unpadBuffer(toBuffer(s.stack[s.stack.length - 2] ?? 0))
+        );
+        const index =
+          storageKey.length === 66
+            ? (type?.key ?? type?.base)?.includes("int")
+              ? parseInt(s.lastSHA?.potentialIndex)
+              : s.lastSHA?.potentialIndex
+            : null;
         const address = s.address.toString();
 
         return [
