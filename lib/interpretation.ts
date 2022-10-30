@@ -19,6 +19,8 @@ import {
   isPush,
   Opcode,
 } from "hardhat/internal/hardhat-network/stack-traces/opcodes";
+import VM from "@ethereumjs/vm";
+import { decodeTokenTransfers } from "./tokens";
 
 export const findStateChanges = async (result: RunTxResult) => {
   const stateManager = result.execResult.runState
@@ -132,6 +134,7 @@ const decodeTrace = async (
 };
 
 export const interpretResult = async (
+  vm: VM,
   contractAddress: string,
   result: RunTxResult,
   trace: MessageTrace
@@ -147,10 +150,11 @@ export const interpretResult = async (
     data: bufferToHex(l[2]),
     decoded: abi && decodeLog(abi, l),
   }));
+  const tokenTransfers = await decodeTokenTransfers(vm, logs);
   const status = result.receipt.status ? "success" : "reverted";
   const gasUsed = result.gasUsed.toString(10);
   const stateChanges = await findStateChanges(result);
   const decodedTrace =
     metadata && (await decodeTrace(contractAddress, partial, metadata, trace));
-  return { logs, status, gasUsed, stateChanges, metadata, decodedTrace };
+  return { logs, status, gasUsed, stateChanges, metadata, decodedTrace, tokenTransfers };
 };

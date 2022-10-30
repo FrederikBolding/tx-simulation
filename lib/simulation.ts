@@ -41,5 +41,5 @@ export const simulateTx = async (txData: TxData, from: string) => {
 
   const trace = vmTracer.getLastTopLevelMessageTrace();
 
-  return { result, trace };
+  return { result, trace, vm };
 };
